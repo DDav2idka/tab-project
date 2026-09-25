@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <h2>Target Tab</h2>
+  <p>This tab is waiting for commands...</p>
+
+  <script>
+    const channel = new BroadcastChannel('tab_commands');
+
+    // Listen for incoming commands
+    channel.onmessage = (event) => {
+      const { action, payload } = event.data;
+      console.log('Received command:', action, payload);
+
+      // Execute specific code based on the command received
+      switch (action) {
+        case 'ALERT':
+          alert(payload);
+          break;
+        case 'CHANGE_BG':
+          document.body.style.backgroundColor = payload;
+          break;
+        case 'NAVIGATE':
+          window.location.href = payload;
+          break;
+      }
+    };
+  </script>
+</body>
+</html>

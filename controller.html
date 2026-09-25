@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <h2>Controller</h2>
+  <button onclick="sendCommand('ALERT', 'Hello from the controller!')">Send Alert</button>
+  <button onclick="sendCommand('CHANGE_BG', 'lightblue')">Change Background</button>
+  <button onclick="sendCommand('NAVIGATE', 'https://wikipedia.org')">Change Page</button>
+
+  <script>
+    // Create a shared communication channel
+    const channel = new BroadcastChannel('tab_commands');
+
+    function sendCommand(action, payload) {
+      // Send command object
+      channel.postMessage({ action: action, payload: payload });
+    }
+  </script>
+</body>
+</html>
