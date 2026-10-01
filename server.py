@@ -8,18 +8,15 @@ import sys
 import aiohttp
 from aiohttp import web
 
-# Set of connected WebSocket clients for the chat/control server
 clients = set()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Vote trackers storing client WebSocket objects
 votes = {
     'refresh': set(),
     'restartvm': set(),
     'revert': set()
 }
 
-# Key aliases mapping to xdotool key names
 KEY_MAP = {
     'ctrl': 'Control_L', 'lctrl': 'Control_L', 'rctrl': 'Control_R',
     'alt': 'Alt_L', 'lalt': 'Alt_L', 'ralt': 'Alt_R',
@@ -35,14 +32,10 @@ KEY_MAP = {
 for i in range(1, 13):
     KEY_MAP[f'f{i}'] = f'F{i}'
 
-
 def normalize_key(k: str) -> str:
-    """Normalize user input keys into xdotool compatible strings."""
     return KEY_MAP.get(k.lower(), k)
 
-
 async def broadcast_sys(text: str):
-    """Send a system message to all connected chat clients."""
     payload = json.dumps({'user': 'SYSTEM', 'message': text, 'isSystem': True})
     for client in list(clients):
         try:
@@ -50,9 +43,11 @@ async def broadcast_sys(text: str):
         except Exception:
             pass
 
+def focus_qemu(env):
+    """Ensures Xvfb focuses the QEMU window before input execution."""
+    subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "qemu", "windowactivate"], env=env, stderr=subprocess.DEVNULL)
 
 def get_qemu_cmd(disk_path: str) -> list:
-    """Construct QEMU launch command with auto-detection for KVM hardware acceleration."""
     kvm_available = os.path.exists('/dev/kvm') and os.access('/dev/kvm', os.R_OK | os.W_OK)
     cpu_args = ["-accel", "kvm", "-cpu", "host"] if kvm_available else ["-accel", "tcg", "-cpu", "qemu64"]
 
@@ -62,6 +57,7 @@ def get_qemu_cmd(disk_path: str) -> list:
         "-m", "1024",
         "-smp", "2",
         "-vga", "cirrus",
+        "-usb", "-device", "usb-tablet",  # CRITICAL: Enables absolute mouse tracking
         "-audiodev", "none,id=snd0",
         "-device", "ac97,audiodev=snd0",
         "-net", "nic,model=rtl8139",
@@ -71,9 +67,7 @@ def get_qemu_cmd(disk_path: str) -> list:
         "-drive", f"file={disk_path},format=qcow2,index=0,media=disk"
     ]
 
-
 async def restart_qemu():
-    """Kill current QEMU instance and restart it safely."""
     subprocess.run(["pkill", "-9", "-f", "qemu-system"], check=False)
     await asyncio.sleep(2)
 
@@ -85,15 +79,11 @@ async def restart_qemu():
     subprocess.Popen(qemu_cmd, env=env)
     await broadcast_sys("💻 QEMU Virtual Machine successfully restarted!")
 
-
 async def restart_script():
-    """Restart python server process."""
     await broadcast_sys("🔄 Restarting application server process...")
     os.execv(sys.executable, [sys.executable] + sys.argv)
 
-
 async def check_vote(ws, user: str, vote_type: str, action_callback):
-    """Process vote logic using 30% active connection threshold."""
     active_users = max(1, len(clients))
     threshold = math.ceil(active_users * 0.30)
 
@@ -107,10 +97,8 @@ async def check_vote(ws, user: str, vote_type: str, action_callback):
         await broadcast_sys(f"✅ Vote threshold reached for !{vote_type}! Executing action...")
         await action_callback()
 
-
 async def process_command(ws, user: str, text: str):
-    """Parse and execute a single command using xdotool or system triggers."""
-    parts = text.split(' ', 1)
+    parts = text.strip().split(' ', 1)
     cmd = parts[0].lower()
     arg = parts[1].strip() if len(parts) > 1 else ''
 
@@ -118,7 +106,10 @@ async def process_command(ws, user: str, text: str):
     env["DISPLAY"] = ":1"
 
     try:
-        # --- VOTING & SYSTEM COMMANDS ---
+        # Auto-focus QEMU window before firing input events
+        focus_qemu(env)
+
+        # --- VOTING COMMANDS ---
         if cmd == '!refresh':
             await check_vote(ws, user, 'refresh', restart_script)
         elif cmd in ('!restartvm', '!revert'):
@@ -130,22 +121,22 @@ async def process_command(ws, user: str, text: str):
             else:
                 await broadcast_sys("VM is already running!")
 
-        # --- TEXT INPUT (!type types string + presses Enter) ---
+        # --- TEXT COMMANDS ---
         elif cmd in ('!type', '!send'):
             if arg:
-                subprocess.run(["xdotool", "type", "--delay", "50", arg], env=env)
-                subprocess.run(["xdotool", "key", "Return"], env=env)
+                subprocess.run(["xdotool", "type", "--clearmodifiers", "--delay", "30", arg], env=env)
+                subprocess.run(["xdotool", "key", "--clearmodifiers", "Return"], env=env)
 
         # --- KEYBOARD COMMANDS ---
         elif cmd == '!key':
             if arg:
                 k = normalize_key(arg)
-                subprocess.run(["xdotool", "key", k], env=env)
+                subprocess.run(["xdotool", "key", "--clearmodifiers", k], env=env)
         elif cmd == '!combo':
             if arg:
                 keys = re.split(r'[\+\s]+', arg)
                 norm_keys = "+".join([normalize_key(k) for k in keys if k])
-                subprocess.run(["xdotool", "key", norm_keys], env=env)
+                subprocess.run(["xdotool", "key", "--clearmodifiers", norm_keys], env=env)
         elif cmd == '!keydown':
             if arg:
                 subprocess.run(["xdotool", "keydown", normalize_key(arg)], env=env)
@@ -177,9 +168,10 @@ async def process_command(ws, user: str, text: str):
         elif cmd == '!mclick':
             subprocess.run(["xdotool", "click", "2"], env=env)
         elif cmd == '!scroll':
-            if arg.lstrip('-').isdigit():
+            clean_arg = arg.lstrip('-')
+            if clean_arg.isdigit():
                 val = int(arg)
-                btn = "4" if val > 0 else "5"  # 4 = Up, 5 = Down
+                btn = "4" if val > 0 else "5"
                 subprocess.run(["xdotool", "click", "--repeat", str(abs(val)), btn], env=env)
         elif cmd == '!drag':
             subparts = arg.split()
@@ -194,16 +186,10 @@ async def process_command(ws, user: str, text: str):
     except Exception as e:
         print(f"Error processing command [{cmd}]:", e)
 
-
-# --- ROUTE HANDLERS ---
-
 async def handle_index(request):
-    """Serve index.html web interface."""
     return web.FileResponse(os.path.join(BASE_DIR, 'index.html'))
 
-
 async def handle_ws(request):
-    """Handle chat WebSocket connection and multi-command parsing."""
     ws = web.WebSocketResponse()
     await ws.prepare(request)
     clients.add(ws)
@@ -215,7 +201,6 @@ async def handle_ws(request):
                 user = data.get('user', 'Anonymous')
                 text = data.get('message', '').strip()
 
-                # Broadcast raw chat message to all connected clients
                 payload = json.dumps({'user': user, 'message': text, 'isSystem': False})
                 for client in list(clients):
                     try:
@@ -223,7 +208,6 @@ async def handle_ws(request):
                     except Exception:
                         pass
 
-                # Parse and execute chained commands starting with '!'
                 if '!' in text:
                     raw_cmds = [c.strip() for c in re.split(r'(?=\!)', text) if c.strip().startswith('!')]
                     for cmd_str in raw_cmds:
@@ -234,9 +218,7 @@ async def handle_ws(request):
             votes[key].discard(ws)
     return ws
 
-
 async def handle_vnc_ws(request):
-    """Proxy WebSocket traffic between client browser and local websockify/x11vnc."""
     ws_client = web.WebSocketResponse()
     await ws_client.prepare(request)
 
@@ -258,9 +240,6 @@ async def handle_vnc_ws(request):
 
             await asyncio.gather(forward_to_server(), forward_to_client(), return_exceptions=True)
     return ws_client
-
-
-# --- APP SETUP ---
 
 app = web.Application()
 app.router.add_get('/', handle_index)
