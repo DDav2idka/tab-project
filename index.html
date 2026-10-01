@@ -9,19 +9,25 @@
     header { background: #0055ea; padding: 10px 20px; font-weight: bold; font-size: 1.2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
     .status { font-size: 0.9rem; background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 12px; }
     .main-container { display: flex; flex: 1; overflow: hidden; }
-    .screen-container { flex: 3; background: #000; position: relative; display: flex; justify-content: center; align-items: center; }
-    iframe { width: 100%; height: 100%; border: none; }
+    
+    /* Screen container with overlay to prevent direct mouse hovering / control */
+    .screen-container { flex: 3; background: #000; position: relative; display: flex; justify-content: center; align-items: center; user-select: none; }
+    iframe { width: 100%; height: 100%; border: none; pointer-events: none; } /* Disabled mouse interaction */
+    .screen-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; cursor: not-allowed; }
+    
     .chat-container { flex: 1; min-width: 320px; max-width: 450px; background: #262626; display: flex; flex-direction: column; border-left: 2px solid #333; }
-    .chat-messages { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; font-size: 0.95rem; }
+    .chat-messages { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; font-size: 0.9rem; }
     .msg { background: #333; padding: 8px 12px; border-radius: 6px; word-break: break-word; }
     .msg .user { font-weight: bold; color: #4da6ff; margin-right: 6px; }
     .msg.sys { background: #2d382d; color: #7cfc00; font-style: italic; }
-    .chat-controls { padding: 15px; background: #1f1f1f; border-top: 1px solid #333; display: flex; flex-direction: column; gap: 8px; }
+    .chat-controls { padding: 12px; background: #1f1f1f; border-top: 1px solid #333; display: flex; flex-direction: column; gap: 8px; }
     .input-row { display: flex; gap: 8px; }
     input[type="text"] { flex: 1; padding: 10px; border-radius: 4px; border: 1px solid #444; background: #111; color: #fff; outline: none; }
     button { padding: 10px 16px; background: #0055ea; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
     button:hover { background: #0044c4; }
-    .cmd-hints { font-size: 0.75rem; color: #aaa; line-height: 1.4; }
+    
+    .cmd-hints { font-size: 0.72rem; color: #bbb; max-height: 140px; overflow-y: auto; background: #151515; padding: 8px; border-radius: 4px; border: 1px solid #333; line-height: 1.4; }
+    .cmd-hints code { color: #4da6ff; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -32,10 +38,12 @@
   <div class="main-container">
     <div class="screen-container">
       <iframe id="vncFrame" src="/vnc/vnc.html?autoconnect=true&resize=scale&path=websockify"></iframe>
+      <!-- Invisible overlay blocks direct iframe clicking/hovering -->
+      <div class="screen-overlay" title="Direct control disabled. Use chat commands below!"></div>
     </div>
     <div class="chat-container">
       <div class="chat-messages" id="chatBox">
-        <div class="msg sys">Welcome to Global Windows XP! Type chat commands to control the VM.</div>
+        <div class="msg sys">Welcome to Multiplayer Windows XP! Use chat commands below to interact.</div>
       </div>
       <div class="chat-controls">
         <div class="input-row">
@@ -44,11 +52,16 @@
           <button onclick="sendMessage()">Send</button>
         </div>
         <div class="cmd-hints">
-          <b>Chat Commands:</b><br>
-          • <code>!type Hello World</code> — Type text<br>
-          • <code>!key Enter</code> / <code>!key Tab</code> / <code>!key BackSpace</code> — Press key<br>
-          • <code>!click 500 300</code> — Click coordinates<br>
-          • <code>!rclick 500 300</code> — Right-click coordinates
+          <b>🗳️ Voting (30% required):</b><br>
+          • <code>!refresh</code> | <code>!restartvm</code> | <code>!revert</code> | <code>!startvm</code><br><br>
+          <b>⌨️ Keyboard & Text:</b><br>
+          • <code>!type text</code> (type without enter) | <code>!send text</code> (type + enter)<br>
+          • <code>!key enter</code> / <code>!key tab</code> / <code>!key f1</code> | <code>!combo ctrl+c</code><br>
+          • <code>!keydown shift</code> | <code>!keyup shift</code><br><br>
+          <b>🖱️ Mouse Controls:</b><br>
+          • <code>!click [count]</code> | <code>!rclick</code> | <code>!mclick</code><br>
+          • <code>!abs 500 300</code> | <code>!move right 100</code> | <code>!drag 100 50</code><br>
+          • <code>!scroll 3</code> (-3 down) | <code>!wait 2</code>
         </div>
       </div>
     </div>
