@@ -123,9 +123,17 @@ async def restart_qemu():
     env["DISPLAY"] = ":1"
     disk_path = "/content/drive/MyDrive/winxp.qcow2"
     qemu_cmd = [
-        "qemu-system-x86_64", "-cpu", "qemu32", "-m", "512", "-smp", "1",
-        "-vga", "cirrus", "-audiodev", "none,id=snd0", "-device", "ac97,audiodev=snd0",
-        "-net", "nic,model=rtl8139", "-net", "user", "-boot", "c",
+        "qemu-system-x86_64",
+        "-accel", "kvm:tcg",
+        "-cpu", "host,qemu64",
+        "-m", "1024",
+        "-smp", "2",
+        "-vga", "std",
+        "-audiodev", "none,id=snd0",
+        "-device", "ac97,audiodev=snd0",
+        "-net", "nic,model=rtl8139",
+        "-net", "user",
+        "-boot", "c",
         "-monitor", "tcp:127.0.0.1:4444,server,nowait",
         "-drive", f"file={disk_path},format=qcow2,index=0,media=disk",
         "-drive", "if=ide,index=1,media=cdrom,id=cd0"
