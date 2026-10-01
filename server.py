@@ -8,17 +8,18 @@ import sys
 import aiohttp
 from aiohttp import web
 
+# Set of connected WebSocket clients for the chat/control server
 clients = set()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Voting trackers: stores set of client websocket objects
+# Vote trackers storing client WebSocket objects
 votes = {
     'refresh': set(),
     'restartvm': set(),
     'revert': set()
 }
 
-# Key aliases map to xdotool key names
+# Key aliases mapping to xdotool key names
 KEY_MAP = {
     'ctrl': 'Control_L', 'lctrl': 'Control_L', 'rctrl': 'Control_R',
     'alt': 'Alt_L', 'lalt': 'Alt_L', 'ralt': 'Alt_R',
@@ -34,11 +35,14 @@ KEY_MAP = {
 for i in range(1, 13):
     KEY_MAP[f'f{i}'] = f'F{i}'
 
-def normalize_key(k):
-    k_lower = k.lower()
-    return KEY_MAP.get(k_lower, k)
 
-async def broadcast_sys(text):
+def normalize_key(k: str) -> str:
+    """Normalize user input keys into xdotool compatible strings."""
+    return KEY_MAP.get(k.lower(), k)
+
+
+async def broadcast_sys(text: str):
+    """Send a system message to all connected chat clients."""
     payload = json.dumps({'user': 'SYSTEM', 'message': text, 'isSystem': True})
     for client in list(clients):
         try:
@@ -46,68 +50,53 @@ async def broadcast_sys(text):
         except Exception:
             pass
 
-async def handle_index(request):
-    return web.FileResponse(os.path.join(BASE_DIR, 'index.html'))
 
-async def handle_ws(request):
-    ws = web.WebSocketResponse()
-    await ws.prepare(request)
-    clients.add(ws)
+def get_qemu_cmd(disk_path: str) -> list:
+    """Construct QEMU launch command with auto-detection for KVM hardware acceleration."""
+    kvm_available = os.path.exists('/dev/kvm') and os.access('/dev/kvm', os.R_OK | os.W_OK)
+    cpu_args = ["-accel", "kvm", "-cpu", "host"] if kvm_available else ["-accel", "tcg", "-cpu", "qemu64"]
 
-    try:
-        async for msg in ws:
-            if msg.type == web.WSMsgType.TEXT:
-                data = json.loads(msg.data)
-                user = data.get('user', 'Anonymous')
-                text = data.get('message', '').strip()
+    return [
+        "qemu-system-x86_64",
+        *cpu_args,
+        "-m", "1024",
+        "-smp", "2",
+        "-vga", "cirrus",
+        "-audiodev", "none,id=snd0",
+        "-device", "ac97,audiodev=snd0",
+        "-net", "nic,model=rtl8139",
+        "-net", "user",
+        "-boot", "c",
+        "-monitor", "tcp:127.0.0.1:4444,server,nowait",
+        "-drive", f"file={disk_path},format=qcow2,index=0,media=disk"
+    ]
 
-                # Broadcast chat message to all
-                payload = json.dumps({'user': user, 'message': text, 'isSystem': False})
-                for client in list(clients):
-                    try:
-                        await client.send_str(payload)
-                    except Exception:
-                        pass
 
-                # Parse and execute multiple commands in a single message
-                if '!' in text:
-                    # Splits message into individual commands starting with '!'
-                    raw_cmds = [c.strip() for c in re.split(r'(?=\!)', text) if c.strip().startswith('!')]
-                    for cmd_str in raw_cmds:
-                        await process_command(ws, user, cmd_str)
-    finally:
-        clients.remove(ws)
-        for key in votes:
-            votes[key].discard(ws)
-    return ws
+async def restart_qemu():
+    """Kill current QEMU instance and restart it safely."""
+    subprocess.run(["pkill", "-9", "-f", "qemu-system"], check=False)
+    await asyncio.sleep(2)
 
-async def handle_vnc_ws(request):
-    ws_client = web.WebSocketResponse()
-    await ws_client.prepare(request)
+    env = os.environ.copy()
+    env["DISPLAY"] = ":1"
+    disk_path = "/content/drive/MyDrive/winxp.qcow2"
 
-    async with aiohttp.ClientSession() as session:
-        async with session.ws_connect('http://127.0.0.1:6080/websockify') as ws_server:
-            async def forward_to_server():
-                async for msg in ws_client:
-                    if msg.type == web.WSMsgType.BINARY:
-                        await ws_server.send_bytes(msg.data)
-                    elif msg.type == web.WSMsgType.TEXT:
-                        await ws_server.send_str(msg.data)
+    qemu_cmd = get_qemu_cmd(disk_path)
+    subprocess.Popen(qemu_cmd, env=env)
+    await broadcast_sys("💻 QEMU Virtual Machine successfully restarted!")
 
-            async def forward_to_client():
-                async for msg in ws_server:
-                    if msg.type == web.WSMsgType.BINARY:
-                        await ws_client.send_bytes(msg.data)
-                    elif msg.type == web.WSMsgType.TEXT:
-                        await ws_client.send_str(msg.data)
 
-            await asyncio.gather(forward_to_server(), forward_to_client(), return_exceptions=True)
-    return ws_client
+async def restart_script():
+    """Restart python server process."""
+    await broadcast_sys("🔄 Restarting application server process...")
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
-async def check_vote(ws, user, vote_type, action_callback):
+
+async def check_vote(ws, user: str, vote_type: str, action_callback):
+    """Process vote logic using 30% active connection threshold."""
     active_users = max(1, len(clients))
     threshold = math.ceil(active_users * 0.30)
-    
+
     votes[vote_type].add(ws)
     current_votes = len(votes[vote_type])
 
@@ -118,29 +107,9 @@ async def check_vote(ws, user, vote_type, action_callback):
         await broadcast_sys(f"✅ Vote threshold reached for !{vote_type}! Executing action...")
         await action_callback()
 
-async def restart_qemu():
-    subprocess.run(["pkill", "-9", "-f", "qemu-system"], check=False)
-    await asyncio.sleep(2)
-    env = os.environ.copy()
-    env["DISPLAY"] = ":1"
-    disk_path = "/content/drive/MyDrive/winxp.qcow2"
-    qemu_cmd = [
-        "qemu-system-x86_64", "-accel", "kvm:tcg", "-cpu", "host,qemu64",
-        "-m", "1024", "-smp", "2", "-vga", "std",
-        "-audiodev", "none,id=snd0", "-device", "ac97,audiodev=snd0",
-        "-net", "nic,model=rtl8139", "-net", "user", "-boot", "c",
-        "-monitor", "tcp:127.0.0.1:4444,server,nowait",
-        "-drive", f"file={disk_path},format=qcow2,index=0,media=disk",
-        "-drive", "if=ide,index=1,media=cdrom,id=cd0"
-    ]
-    subprocess.Popen(qemu_cmd, env=env)
-    await broadcast_sys("💻 QEMU VM successfully restarted!")
 
-async def restart_script():
-    await broadcast_sys("🔄 Restarting script environment...")
-    os.execv(sys.executable, [sys.executable] + sys.argv)
-
-async def process_command(ws, user, text):
+async def process_command(ws, user: str, text: str):
+    """Parse and execute a single command using xdotool or system triggers."""
     parts = text.split(' ', 1)
     cmd = parts[0].lower()
     arg = parts[1].strip() if len(parts) > 1 else ''
@@ -149,13 +118,11 @@ async def process_command(ws, user, text):
     env["DISPLAY"] = ":1"
 
     try:
-        # --- VOTING COMMANDS ---
+        # --- VOTING & SYSTEM COMMANDS ---
         if cmd == '!refresh':
             await check_vote(ws, user, 'refresh', restart_script)
-        elif cmd == '!restartvm':
-            await check_vote(ws, user, 'restartvm', restart_qemu)
-        elif cmd == '!revert':
-            await check_vote(ws, user, 'revert', restart_qemu)
+        elif cmd in ('!restartvm', '!revert'):
+            await check_vote(ws, user, cmd[1:], restart_qemu)
         elif cmd == '!startvm':
             res = subprocess.run(["pgrep", "-f", "qemu-system"], capture_output=True)
             if not res.stdout:
@@ -163,13 +130,13 @@ async def process_command(ws, user, text):
             else:
                 await broadcast_sys("VM is already running!")
 
-        # --- TEXT COMMANDS (!type now types text + presses Enter) ---
+        # --- TEXT INPUT (!type types string + presses Enter) ---
         elif cmd in ('!type', '!send'):
             if arg:
                 subprocess.run(["xdotool", "type", "--delay", "50", arg], env=env)
                 subprocess.run(["xdotool", "key", "Return"], env=env)
 
-        # --- KEY COMMANDS ---
+        # --- KEYBOARD COMMANDS ---
         elif cmd == '!key':
             if arg:
                 k = normalize_key(arg)
@@ -181,12 +148,10 @@ async def process_command(ws, user, text):
                 subprocess.run(["xdotool", "key", norm_keys], env=env)
         elif cmd == '!keydown':
             if arg:
-                k = normalize_key(arg)
-                subprocess.run(["xdotool", "keydown", k], env=env)
+                subprocess.run(["xdotool", "keydown", normalize_key(arg)], env=env)
         elif cmd == '!keyup':
             if arg:
-                k = normalize_key(arg)
-                subprocess.run(["xdotool", "keyup", k], env=env)
+                subprocess.run(["xdotool", "keyup", normalize_key(arg)], env=env)
 
         # --- MOUSE COMMANDS ---
         elif cmd == '!move':
@@ -214,7 +179,7 @@ async def process_command(ws, user, text):
         elif cmd == '!scroll':
             if arg.lstrip('-').isdigit():
                 val = int(arg)
-                btn = "4" if val > 0 else "5" # 4 = Up, 5 = Down
+                btn = "4" if val > 0 else "5"  # 4 = Up, 5 = Down
                 subprocess.run(["xdotool", "click", "--repeat", str(abs(val)), btn], env=env)
         elif cmd == '!drag':
             subparts = arg.split()
@@ -227,7 +192,75 @@ async def process_command(ws, user, text):
                 await asyncio.sleep(sec)
 
     except Exception as e:
-        print("Error executing command:", e)
+        print(f"Error processing command [{cmd}]:", e)
+
+
+# --- ROUTE HANDLERS ---
+
+async def handle_index(request):
+    """Serve index.html web interface."""
+    return web.FileResponse(os.path.join(BASE_DIR, 'index.html'))
+
+
+async def handle_ws(request):
+    """Handle chat WebSocket connection and multi-command parsing."""
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+    clients.add(ws)
+
+    try:
+        async for msg in ws:
+            if msg.type == web.WSMsgType.TEXT:
+                data = json.loads(msg.data)
+                user = data.get('user', 'Anonymous')
+                text = data.get('message', '').strip()
+
+                # Broadcast raw chat message to all connected clients
+                payload = json.dumps({'user': user, 'message': text, 'isSystem': False})
+                for client in list(clients):
+                    try:
+                        await client.send_str(payload)
+                    except Exception:
+                        pass
+
+                # Parse and execute chained commands starting with '!'
+                if '!' in text:
+                    raw_cmds = [c.strip() for c in re.split(r'(?=\!)', text) if c.strip().startswith('!')]
+                    for cmd_str in raw_cmds:
+                        await process_command(ws, user, cmd_str)
+    finally:
+        clients.remove(ws)
+        for key in votes:
+            votes[key].discard(ws)
+    return ws
+
+
+async def handle_vnc_ws(request):
+    """Proxy WebSocket traffic between client browser and local websockify/x11vnc."""
+    ws_client = web.WebSocketResponse()
+    await ws_client.prepare(request)
+
+    async with aiohttp.ClientSession() as session:
+        async with session.ws_connect('http://127.0.0.1:6080/websockify') as ws_server:
+            async def forward_to_server():
+                async for msg in ws_client:
+                    if msg.type == web.WSMsgType.BINARY:
+                        await ws_server.send_bytes(msg.data)
+                    elif msg.type == web.WSMsgType.TEXT:
+                        await ws_server.send_str(msg.data)
+
+            async def forward_to_client():
+                async for msg in ws_server:
+                    if msg.type == web.WSMsgType.BINARY:
+                        await ws_client.send_bytes(msg.data)
+                    elif msg.type == web.WSMsgType.TEXT:
+                        await ws_client.send_str(msg.data)
+
+            await asyncio.gather(forward_to_server(), forward_to_client(), return_exceptions=True)
+    return ws_client
+
+
+# --- APP SETUP ---
 
 app = web.Application()
 app.router.add_get('/', handle_index)
