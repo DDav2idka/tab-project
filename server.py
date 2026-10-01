@@ -51,13 +51,19 @@ def get_qemu_cmd(disk_path: str) -> list:
     kvm_available = os.path.exists('/dev/kvm') and os.access('/dev/kvm', os.R_OK | os.W_OK)
     cpu_args = ["-accel", "kvm", "-cpu", "host"] if kvm_available else ["-accel", "tcg", "-cpu", "qemu64"]
 
+def get_qemu_cmd(disk_path: str) -> list:
+    kvm_available = os.path.exists('/dev/kvm') and os.access('/dev/kvm', os.R_OK | os.W_OK)
+    cpu_args = ["-accel", "kvm", "-cpu", "host"] if kvm_available else ["-accel", "tcg", "-cpu", "qemu64"]
+
     return [
         "qemu-system-x86_64",
         *cpu_args,
         "-m", "1024",
         "-smp", "2",
         "-vga", "cirrus",
-        "-usb", "-device", "usb-tablet",  # CRITICAL: Enables absolute mouse tracking
+        "-display", "gtk,show-menubar=off",  # CRITICAL: Removes 'Machine View' bar
+        "-full-screen",
+        "-usb", "-device", "usb-tablet",
         "-audiodev", "none,id=snd0",
         "-device", "ac97,audiodev=snd0",
         "-net", "nic,model=rtl8139",
