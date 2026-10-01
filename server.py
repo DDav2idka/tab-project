@@ -69,12 +69,14 @@ async def handle_ws(request):
                     except Exception:
                         pass
 
-                # Handle Commands
-                if text.startswith('!'):
-                    await process_command(ws, user, text)
+                # Parse and execute multiple commands in a single message
+                if '!' in text:
+                    # Splits message into individual commands starting with '!'
+                    raw_cmds = [c.strip() for c in re.split(r'(?=\!)', text) if c.strip().startswith('!')]
+                    for cmd_str in raw_cmds:
+                        await process_command(ws, user, cmd_str)
     finally:
         clients.remove(ws)
-        # Clean up stale votes when user disconnects
         for key in votes:
             votes[key].discard(ws)
     return ws
@@ -123,17 +125,10 @@ async def restart_qemu():
     env["DISPLAY"] = ":1"
     disk_path = "/content/drive/MyDrive/winxp.qcow2"
     qemu_cmd = [
-        "qemu-system-x86_64",
-        "-accel", "kvm:tcg",
-        "-cpu", "host,qemu64",
-        "-m", "1024",
-        "-smp", "2",
-        "-vga", "std",
-        "-audiodev", "none,id=snd0",
-        "-device", "ac97,audiodev=snd0",
-        "-net", "nic,model=rtl8139",
-        "-net", "user",
-        "-boot", "c",
+        "qemu-system-x86_64", "-accel", "kvm:tcg", "-cpu", "host,qemu64",
+        "-m", "1024", "-smp", "2", "-vga", "std",
+        "-audiodev", "none,id=snd0", "-device", "ac97,audiodev=snd0",
+        "-net", "nic,model=rtl8139", "-net", "user", "-boot", "c",
         "-monitor", "tcp:127.0.0.1:4444,server,nowait",
         "-drive", f"file={disk_path},format=qcow2,index=0,media=disk",
         "-drive", "if=ide,index=1,media=cdrom,id=cd0"
@@ -162,18 +157,14 @@ async def process_command(ws, user, text):
         elif cmd == '!revert':
             await check_vote(ws, user, 'revert', restart_qemu)
         elif cmd == '!startvm':
-            # Check if QEMU running
             res = subprocess.run(["pgrep", "-f", "qemu-system"], capture_output=True)
             if not res.stdout:
                 await restart_qemu()
             else:
                 await broadcast_sys("VM is already running!")
 
-        # --- TEXT COMMANDS ---
-        elif cmd == '!type':
-            if arg:
-                subprocess.run(["xdotool", "type", "--delay", "50", arg], env=env)
-        elif cmd == '!send':
+        # --- TEXT COMMANDS (!type now types text + presses Enter) ---
+        elif cmd in ('!type', '!send'):
             if arg:
                 subprocess.run(["xdotool", "type", "--delay", "50", arg], env=env)
                 subprocess.run(["xdotool", "key", "Return"], env=env)
@@ -185,7 +176,6 @@ async def process_command(ws, user, text):
                 subprocess.run(["xdotool", "key", k], env=env)
         elif cmd == '!combo':
             if arg:
-                # Handle ctrl+c or ctrl c
                 keys = re.split(r'[\+\s]+', arg)
                 norm_keys = "+".join([normalize_key(k) for k in keys if k])
                 subprocess.run(["xdotool", "key", norm_keys], env=env)
@@ -233,7 +223,7 @@ async def process_command(ws, user, text):
                 subprocess.run(["xdotool", "mousedown", "1", "mousemove_relative", "--", dx, dy, "mouseup", "1"], env=env)
         elif cmd == '!wait':
             if arg.isdigit():
-                sec = min(int(arg), 5) # Max 5 sec limit to prevent freezing
+                sec = min(int(arg), 5)
                 await asyncio.sleep(sec)
 
     except Exception as e:
