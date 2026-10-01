@@ -6,25 +6,25 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     
-    body {
+    html, body {
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
       font-family: Tahoma, 'Segoe UI', Geneva, sans-serif;
       font-size: 11px;
-      background: #004e98; /* XP Desktop Blue */
       background: linear-gradient(135deg, #1e5799 0%, #2989d8 50%, #207cca 51%, #7db9e8 100%);
-      height: 100vh;
       display: flex;
       justify-content: center;
       align-items: center;
-      padding: 10px;
-      overflow: hidden;
+      padding: 8px;
     }
 
     /* Windows XP Main Container Window */
     .xp-window {
       width: 100%;
-      max-width: 1280px;
-      height: 95vh;
-      background: #ece9d8; /* XP System Background */
+      height: 100%;
+      max-height: 100vh;
+      background: #ece9d8;
       border: 3px solid #0055ea;
       border-radius: 8px 8px 0 0;
       box-shadow: 4px 4px 15px rgba(0,0,0,0.5);
@@ -33,10 +33,10 @@
       overflow: hidden;
     }
 
-    /* XP Title Bar (Luna Blue Theme) */
+    /* Title Bar */
     .xp-titlebar {
       background: linear-gradient(to bottom, #0058e6 0%, #3a93ff 10%, #0058e6 50%, #003692 100%);
-      height: 30px;
+      height: 28px;
       padding: 0 8px;
       display: flex;
       justify-content: space-between;
@@ -46,22 +46,13 @@
       font-size: 12px;
       text-shadow: 1px 1px 1px #000;
       user-select: none;
+      flex-shrink: 0;
     }
 
-    .xp-titlebar-title {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .xp-window-controls {
-      display: flex;
-      gap: 3px;
-    }
-
+    .xp-window-controls { display: flex; gap: 3px; }
     .xp-btn-ctrl {
-      width: 21px;
-      height: 21px;
+      width: 20px;
+      height: 20px;
       border: 1px solid #fff;
       border-radius: 3px;
       font-weight: bold;
@@ -71,23 +62,21 @@
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
     }
-    .xp-btn-min { background: #0058e6; }
-    .xp-btn-max { background: #0058e6; }
-    .xp-btn-close { background: #e81123; border-color: #fff; }
+    .xp-btn-min, .xp-btn-max { background: #0058e6; }
+    .xp-btn-close { background: #e81123; }
 
-    /* Main Workspace Layout */
+    /* Workspace */
     .xp-body {
       display: flex;
       flex: 1;
       padding: 6px;
       gap: 6px;
       overflow: hidden;
-      background: #ece9d8;
+      min-height: 0; /* Prevents overflow pushing elements outside viewport */
     }
 
-    /* Left Side: VM Screen Container */
+    /* Screen Stream Area */
     .screen-wrapper {
       flex: 3;
       background: #000;
@@ -96,13 +85,14 @@
       display: flex;
       justify-content: center;
       align-items: center;
+      overflow: hidden;
     }
 
     iframe {
       width: 100%;
       height: 100%;
       border: none;
-      pointer-events: none; /* Disables direct mouse hovering / control */
+      pointer-events: none;
     }
 
     .screen-overlay {
@@ -115,14 +105,15 @@
       cursor: not-allowed;
     }
 
-    /* Right Side: Sidebar Chat & Controls */
+    /* Sidebar & Chat Panel */
     .sidebar {
       flex: 1;
       min-width: 310px;
-      max-width: 400px;
+      max-width: 380px;
       display: flex;
       flex-direction: column;
       gap: 6px;
+      min-height: 0; /* Keeps sidebar bound inside parent flex container */
     }
 
     .xp-panel {
@@ -132,25 +123,30 @@
       flex-direction: column;
     }
 
+    .xp-panel.chat-panel {
+      flex: 1;
+      min-height: 0; /* Ensures chat box can shrink & scroll */
+    }
+
     .xp-panel-header {
       background: linear-gradient(to right, #215dc6, #6393e6);
       color: white;
       font-weight: bold;
       padding: 4px 8px;
       font-size: 11px;
+      flex-shrink: 0;
     }
 
-    /* Chat Messages Window */
+    /* Scrollable Chat Box */
     .chat-box {
       flex: 1;
-      height: 280px;
+      min-height: 0; /* Forces internal scrolling when contents fill area */
       padding: 8px;
       overflow-y: auto;
       background: #ffffff;
       display: flex;
       flex-direction: column;
       gap: 4px;
-      font-size: 11px;
     }
 
     .msg {
@@ -163,7 +159,6 @@
     .msg .user { font-weight: bold; color: #0a4da3; margin-right: 4px; }
     .msg.sys { background: #eaf2ff; border-color: #a4c2f4; color: #003399; font-style: italic; }
 
-    /* Input Controls */
     .chat-inputs {
       padding: 6px;
       background: #ece9d8;
@@ -171,6 +166,7 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
+      flex-shrink: 0;
     }
 
     .input-row { display: flex; gap: 4px; }
@@ -184,7 +180,6 @@
       outline: none;
     }
 
-    /* XP Style Glossy Button */
     button.xp-btn {
       background: linear-gradient(to bottom, #ffffff 0%, #ece9d8 50%, #d8d0c0 100%);
       border: 1px solid #003c74;
@@ -193,24 +188,15 @@
       font-family: Tahoma, sans-serif;
       font-size: 11px;
       font-weight: bold;
-      color: #000;
       cursor: pointer;
-      box-shadow: inset 0 1px 0 #fff;
     }
 
     button.xp-btn:hover {
       background: linear-gradient(to bottom, #fff8e0 0%, #ffdb8b 50%, #eac16c 100%);
-      border-color: #e59700;
     }
 
-    button.xp-btn:active {
-      background: #dbceb8;
-      box-shadow: inset 1px 1px 2px #808080;
-    }
-
-    /* Command Reference Box */
     .cmd-hints {
-      height: 140px;
+      height: 120px;
       overflow-y: auto;
       padding: 6px;
       background: #ffffed;
@@ -218,10 +204,10 @@
       font-size: 10px;
       line-height: 1.4;
       color: #333;
+      flex-shrink: 0;
     }
     .cmd-hints code { color: #0058e6; font-weight: bold; }
 
-    /* Status Bar at Bottom */
     .xp-statusbar {
       height: 22px;
       background: #ece9d8;
@@ -231,6 +217,7 @@
       align-items: center;
       gap: 10px;
       font-size: 11px;
+      flex-shrink: 0;
     }
 
     .status-panel {
@@ -246,11 +233,8 @@
 <body>
 
   <div class="xp-window">
-    <!-- XP Title Bar -->
     <div class="xp-titlebar">
-      <div class="xp-titlebar-title">
-        <span>💻 Windows XP Professional - Multiplayer Terminal</span>
-      </div>
+      <span>💻 Windows XP Professional - Multiplayer Terminal</span>
       <div class="xp-window-controls">
         <div class="xp-btn-ctrl xp-btn-min">0</div>
         <div class="xp-btn-ctrl xp-btn-max">1</div>
@@ -258,18 +242,14 @@
       </div>
     </div>
 
-    <!-- Main Workspace -->
     <div class="xp-body">
-      <!-- Screen Stream Area -->
       <div class="screen-wrapper">
         <iframe id="vncFrame" src="/vnc/vnc.html?autoconnect=true&resize=scale&path=websockify"></iframe>
         <div class="screen-overlay" title="Direct pointer interaction disabled. Use chat commands below!"></div>
       </div>
 
-      <!-- Right Control Panel -->
       <div class="sidebar">
-        <!-- Chat Console -->
-        <div class="xp-panel" style="flex: 1;">
+        <div class="xp-panel chat-panel">
           <div class="xp-panel-header">💬 Chat & Command Stream</div>
           <div class="chat-box" id="chatBox">
             <div class="msg sys">Welcome to Multiplayer Windows XP! You can chain multiple commands (e.g. !abs 100 200 !type notepad).</div>
@@ -283,16 +263,14 @@
           </div>
         </div>
 
-        <!-- Command Guide -->
         <div class="xp-panel">
           <div class="xp-panel-header">📋 Command Reference</div>
           <div class="cmd-hints">
             <b>🗳️ Voting (30% threshold):</b><br>
             • <code>!refresh</code> | <code>!restartvm</code> | <code>!revert</code> | <code>!startvm</code><br><br>
-            <b>⌨️ Typing & Keys (Chaining allowed):</b><br>
+            <b>⌨️ Typing & Keys:</b><br>
             • <code>!type text</code> (Types text + Enter)<br>
-            • <code>!key enter</code> / <code>!key f1</code> | <code>!combo ctrl+c</code><br>
-            • <code>!keydown shift</code> | <code>!keyup shift</code><br><br>
+            • <code>!key enter</code> / <code>!key f1</code> | <code>!combo ctrl+c</code><br><br>
             <b>🖱️ Mouse Controls:</b><br>
             • <code>!click [count]</code> | <code>!rclick</code> | <code>!mclick</code><br>
             • <code>!abs 500 300</code> | <code>!move right 100</code> | <code>!drag 100 50</code><br>
@@ -302,7 +280,6 @@
       </div>
     </div>
 
-    <!-- XP Status Bar -->
     <div class="xp-statusbar">
       <div class="status-panel" id="connStatus" style="width: 140px;">Connecting...</div>
       <div class="status-panel" style="flex: 1;">System Ready. Control VM using chat commands.</div>
