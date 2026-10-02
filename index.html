@@ -73,19 +73,36 @@
       padding: 6px;
       gap: 6px;
       overflow: hidden;
-      min-height: 0; /* Prevents overflow pushing elements outside viewport */
+      min-height: 0;
     }
 
-    /* Screen Stream Area */
-    .screen-wrapper {
+    /* Screen Stream Container */
+    .screen-container {
       flex: 3;
-      background: #000;
+      display: flex;
+      flex-direction: column;
       border: 2px inset #fff;
+      background: #000;
+      min-height: 0;
+    }
+
+    .screen-header {
+      background: linear-gradient(to right, #215dc6, #6393e6);
+      color: white;
+      font-weight: bold;
+      padding: 4px 8px;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+
+    .screen-wrapper {
+      flex: 1;
       position: relative;
       display: flex;
       justify-content: center;
       align-items: center;
       overflow: hidden;
+      min-height: 0;
     }
 
     iframe {
@@ -105,7 +122,7 @@
       cursor: not-allowed;
     }
 
-    /* Sidebar & Chat Panel */
+    /* Sidebar & Panels */
     .sidebar {
       flex: 1;
       min-width: 310px;
@@ -113,7 +130,7 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
-      min-height: 0; /* Keeps sidebar bound inside parent flex container */
+      min-height: 0;
     }
 
     .xp-panel {
@@ -125,7 +142,7 @@
 
     .xp-panel.chat-panel {
       flex: 1;
-      min-height: 0; /* Ensures chat box can shrink & scroll */
+      min-height: 0;
     }
 
     .xp-panel-header {
@@ -137,10 +154,36 @@
       flex-shrink: 0;
     }
 
+    /* Rules Banner */
+    .rules-body {
+      padding: 6px 8px;
+      background: #fff0f0;
+      border-top: 1px solid #e0c0c0;
+      font-size: 11px;
+      color: #333;
+      line-height: 1.4;
+      flex-shrink: 0;
+    }
+    .rules-body ol {
+      margin-left: 16px;
+      font-weight: bold;
+      color: #a00000;
+    }
+    .rules-note {
+      margin-top: 4px;
+      font-size: 10px;
+      font-weight: bold;
+      color: #cc0000;
+      background: #ffe0e0;
+      padding: 3px 6px;
+      border: 1px dashed #ff9999;
+      border-radius: 2px;
+    }
+
     /* Scrollable Chat Box */
     .chat-box {
       flex: 1;
-      min-height: 0; /* Forces internal scrolling when contents fill area */
+      min-height: 0;
       padding: 8px;
       overflow-y: auto;
       background: #ffffff;
@@ -196,7 +239,7 @@
     }
 
     .cmd-hints {
-      height: 120px;
+      height: 95px;
       overflow-y: auto;
       padding: 6px;
       background: #ffffed;
@@ -243,12 +286,26 @@
     </div>
 
     <div class="xp-body">
-      <div class="screen-wrapper">
-        <iframe id="vncFrame" src="/vnc/vnc.html?autoconnect=true&resize=scale&path=websockify"></iframe>
-        <div class="screen-overlay" title="Direct pointer interaction disabled. Use chat commands below!"></div>
+      <div class="screen-container">
+        <div class="screen-header">🖥️ Open Windows XP (noVNC):</div>
+        <div class="screen-wrapper">
+          <iframe id="vncFrame" src="/vnc/vnc.html?autoconnect=true&resize=scale&path=websockify"></iframe>
+          <div class="screen-overlay" title="Direct pointer interaction disabled. Use chat commands below!"></div>
+        </div>
       </div>
 
       <div class="sidebar">
+        <div class="xp-panel">
+          <div class="xp-panel-header">⚠️ Server Rules</div>
+          <div class="rules-body">
+            <ol>
+              <li>Do not delete System32</li>
+              <li>Do not spamming</li>
+            </ol>
+            <div class="rules-note">Note : If someone do this = Ban 1 day - 7 day</div>
+          </div>
+        </div>
+
         <div class="xp-panel chat-panel">
           <div class="xp-panel-header">💬 Chat & Command Stream</div>
           <div class="chat-box" id="chatBox">
