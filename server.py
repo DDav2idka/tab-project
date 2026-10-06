@@ -57,6 +57,7 @@ def get_qemu_cmd(disk_path: str) -> list:
         "-m", "1024",
         "-smp", "2",
         "-vga", "std",
+        "-full-screen",                     # <--- Prevents title bar from pushing taskbar down
         "-usb",
         "-device", "usb-tablet",
         "-audiodev", "none,id=snd0",
@@ -65,7 +66,7 @@ def get_qemu_cmd(disk_path: str) -> list:
         "-net", "user",
         "-boot", "c",
         "-monitor", "tcp:127.0.0.1:4444,server,nowait",
-        "-drive", f"file={disk_path},format=qcow2,index=0,media=disk,cache=writeback"
+        "-drive", f"file={DISK_PATH},format=qcow2,index=0,media=disk,cache=writeback"
     ]
 
 async def restart_qemu():
